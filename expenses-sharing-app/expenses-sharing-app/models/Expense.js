@@ -2,13 +2,13 @@
 const mongoose = require('mongoose');
 
 const expenseSchema = new mongoose.Schema({
-    amount: Number,
-    splitMethod: String,
-    participants: [{ userId: mongoose.Schema.Types.ObjectId, amountOwed: Number }],
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Add this line
-    date: { type: Date, default: Date.now }
+    amount: { type: Number, required: true },
+    splitMethod: { type: String, required: true },
+    participants: [{
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Reference to the User model
+        amountOwed: { type: Number }
+    }],
+    createdAt: { type: Date, default: Date.now }  // Automatically set creation date
 });
 
-// Create and export the model
-const Expense = mongoose.model('Expense', expenseSchema);
-module.exports = Expense;
+module.exports = mongoose.model('Expense', expenseSchema);
