@@ -88,35 +88,67 @@ router.get('/', async (req, res) => {
 router.get('/balance-sheet', async (req, res) => {
     try {
         console.log('Request received for balance sheet');
-        
-        // Fetch expenses for all users
-        const expenses = await Expense.find();
+
+        // Fetch all expenses and populate user details
+        const expenses = await Expense.find().populate('participants.userId', 'name email');
         console.log('Fetched Expenses:', expenses); // Log fetched expenses
 
-        // Check if any expenses were found
         if (!expenses.length) {
             return res.status(404).json({ message: 'No expenses found.' });
         }
 
         // Create a PDF document
         const doc = new PDFDocument();
-        let filename = `balance-sheet-all-users.pdf`;
+        const filename = `balance-sheet-all-users.pdf`;
         res.setHeader('Content-disposition', `attachment; filename="${filename}"`);
         res.setHeader('Content-type', 'application/pdf');
 
-        // Add content to the PDF
+        // Add title to the PDF
         doc.fontSize(25).text('Consolidated Balance Sheet', { align: 'center' });
         doc.moveDown();
 
-        // Add expense details for all users
+        let totalOverallExpenses = 0;
+        let userExpenseSummary = {};
+
+        // Iterate over expenses to gather data
         expenses.forEach(expense => {
-            doc.fontSize(12).text(`User ID: ${expense.user}, Amount: ${expense.amount}, Split Method: ${expense.splitMethod}, Date: ${expense.date}`);
+            doc.fontSize(14).text(`Expense Amount: ${expense.amount}, Split Method: ${expense.splitMethod}, Date: ${expense.createdAt}`);
             doc.moveDown();
+            doc.fontSize(12).text('Participants:', { underline: true });
+
+            totalOverallExpenses += expense.amount;
+
+            expense.participants.forEach(participant => {
+                const user = participant.userId; // This should now contain the populated user details
+                const userName = user ? user.name : 'Unknown User';
+
+                // Accumulate individual user expenses
+                if (!userExpenseSummary[user._id]) {
+                    userExpenseSummary[user._id] = { name: userName, totalOwed: 0 };
+                }
+                userExpenseSummary[user._id].totalOwed += participant.amountOwed;
+
+                // Add participant details to the PDF
+                doc.text(`${userName} owes: ${participant.amountOwed}`);
+            });
+            doc.moveDown();
+        });
+
+        // Add overall total expense to the PDF
+        doc.fontSize(14).text(`Overall Total Expenses for All Users: ${totalOverallExpenses}`);
+        doc.moveDown();
+
+        // Add individual user expense summaries
+        doc.fontSize(16).text('Individual User Expense Summary:', { underline: true });
+        Object.keys(userExpenseSummary).forEach(userId => {
+            const user = userExpenseSummary[userId];
+            doc.text(`${user.name} owes a total of: ${user.totalOwed}`);
         });
 
         // Finalize the PDF and send it to the client
         doc.end();
         doc.pipe(res);
+
     } catch (error) {
         console.error('Error generating balance sheet:', error); // Log error details
         res.status(500).json({ message: 'Internal server error.' });
